@@ -2,6 +2,7 @@ import { validationResult } from 'express-validator'
 import path from 'path'
 import fs from 'fs'
 import Post from '../models/post.js'
+import User from '../models/user.js'
 
 const clearImage = (filePath) => {
     console.log(filePath);
@@ -70,15 +71,23 @@ export function createPost(req, res, next) {
         title: req.body.title,
         imageUrl: imageUrl,
         content: req.body.content,
-        creator: { name : 'Hamzah'}
+        creator: req.userId
     })
     
     newPost
     .save()
     .then(result => {
+        return User.findById(req.userId)  
+    })
+    .then(user => {
+        user.posts.push(newPost)
+        return user.save()
+    })
+    .then(result => {
         res.status(201).json({
             message: 'Post created successfully',
-            post: result
+            post: newPost,
+            creator: { _id: result._id, name: result.name }
         })
     })
     .catch(err => {
@@ -114,6 +123,12 @@ export const updatePost = (req, res, next) => {
                 throw error
             }
 
+            if(post.creator.toString() !== req.userId) {
+                const error = new Error('Not authorized')
+                error.statusCode = 403
+                throw error
+            }
+
             if(imageUrl !== post.imageUrl) {
                 clearImage(post.imageUrl)
             }
@@ -144,14 +159,50 @@ export const deletePost = (req, res, next) => {
                 error.statusCode = 404
                 throw error
             }
+            
+            if(post.creator.toString() !== req.userId) {
+                const error = new Error('Not authorized')
+                error.statusCode = 403
+                throw error
+            }
+
             clearImage(post.imageUrl)
             Post.findByIdAndDelete(postId)
+                .then(result => {
+                    return User.findById(req.userId)
+                })
+                .then(user => {
+                    user.posts.pull(postId)
+                    return user.save()
+                })
                 .then(result => {
                     res.status(200).json({ message: 'Post deleted successfully'})
                 })
                 .catch(err => {
                     next(err)
                 })
+        })
+        .catch(err => {
+            next(err)
+        })
+}
+
+export const getStatus = (req, res, next) => {
+    User.findById(req.userId)
+        .then(user => {
+            return res.status(200).json({ status: user.status })
+        })
+}
+
+export const setStatus = (req, res, next) => {
+    const { status } = req.body
+    User.findById(req.userId)
+        .then(user => {
+            user.status = status
+            return user.save()
+        })
+        .then(result => {
+            res.status(201).json({ message: 'Status updated successfully'})
         })
         .catch(err => {
             next(err)

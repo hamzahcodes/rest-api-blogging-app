@@ -1,6 +1,7 @@
 import { validationResult } from "express-validator";
 import bcrypt from 'bcryptjs'
 import User from "../models/user.js";
+import jwt from 'jsonwebtoken'
 
 export const signup = (req, res, next) => {
     const errors = validationResult(req)
@@ -49,7 +50,8 @@ export const login = (req, res, next) => {
                 error.statusCode = 401
                 throw error
             }
-            
+            const token = jwt.sign({ email: loadedUser.email, userId: loadedUser._id.toString()}, 'secret', { expiresIn: '1h' });
+            res.status(200).json({ token: token, userId: loadedUser._id.toString() })
         })
         .catch(err => {
             next(err)
